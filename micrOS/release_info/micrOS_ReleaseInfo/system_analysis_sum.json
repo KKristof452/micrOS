@@ -138,7 +138,7 @@
         ],
         "modules/LM_system.py": [
             8.87,
-            0
+            3
         ],
         "modules/LM_robustness.py": [
             8.47,
@@ -166,7 +166,7 @@
         ],
         "modules/LM_oled.py": [
             9.37,
-            0
+            1
         ],
         "modules/LM_tinyrgb.py": [
             7.95,
@@ -186,11 +186,11 @@
         ],
         "modules/LM_switch.py": [
             8.68,
-            0
+            1
         ],
         "modules/LM_servo.py": [
             7.73,
-            0
+            1
         ],
         "modules/LM_rgbcct.py": [
             8.62,
@@ -198,7 +198,7 @@
         ],
         "modules/LM_oled_sh1106.py": [
             9.2,
-            0
+            1
         ],
         "modules/LM_haptic.py": [
             9.25,
@@ -210,11 +210,11 @@
         ],
         "modules/LM_neopixel.py": [
             7.77,
-            0
+            3
         ],
         "modules/LM_cct.py": [
             9.03,
-            0
+            1
         ],
         "modules/LM_L9110_DCmotor.py": [
             7.69,
@@ -254,7 +254,7 @@
         ],
         "modules/LM_cluster.py": [
             8.82,
-            0
+            1
         ],
         "modules/LM_espnow.py": [
             7.14,
@@ -270,7 +270,7 @@
         ],
         "modules/LM_rgb.py": [
             9.01,
-            0
+            1
         ],
         "modules/LM_distance.py": [
             8.86,
@@ -290,7 +290,7 @@
         ],
         "modules/LM_presence.py": [
             8.89,
-            0
+            4
         ],
         "modules/LM_trackball.py": [
             8.6,
@@ -298,11 +298,11 @@
         ],
         "modules/LM_dimmer.py": [
             8.32,
-            0
+            1
         ],
         "modules/LM_gameOfLife.py": [
             9.29,
-            0
+            1
         ],
         "modules/LM_ds18.py": [
             6.0,
@@ -310,7 +310,7 @@
         ],
         "modules/LM_i2s_mic.py": [
             8.42,
-            0
+            2
         ],
         "modules/LM_sdcard.py": [
             8.11,
@@ -318,7 +318,7 @@
         ],
         "modules/LM_fileserver.py": [
             9.2,
-            0
+            1
         ]
     },
     "summary": {

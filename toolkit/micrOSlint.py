@@ -137,13 +137,16 @@ def _update_dep_category(struct, core_filter_list, lm_filter_list, master_key='c
 
 def combine_data_structures(core_struct, lm_struct, all_struct, verbose=True):
     # Group system modules and micrOS modules - core
-    core_resource_names = [c.split('.')[0] for c in core_struct]
-    lm_resource_names = [c.split('.')[0] for c in lm_struct]
+    resource_name = lambda path: os.path.splitext(os.path.basename(path))[0]
+    core_resource_names = [resource_name(c) for c in core_struct]
+    lm_resource_names = [resource_name(c) for c in lm_struct]
 
     categories_core = _update_dep_category(core_struct, core_resource_names, lm_resource_names, master_key='core')
     categories_lm = _update_dep_category(lm_struct, core_resource_names, lm_resource_names, master_key='load_module')
-    categories_other = {'pin_maps': all_struct['pin_maps'], 'other': all_struct['other']}
-    categories = {**categories_core, **categories_lm, **categories_other}
+    pinmap_struct = parse_core_modules(all_struct['pin_maps'], verbose=verbose)
+    categories_pinmaps = _update_dep_category(pinmap_struct, core_resource_names, lm_resource_names, master_key='pin_maps')
+    categories_other = {'other': all_struct['other']}
+    categories = {**categories_core, **categories_lm, **categories_pinmaps, **categories_other}
     if verbose:
         print(f"{'_'*100}\nRUN combine_data_structures")
         print(json.dumps(categories, sort_keys=True, indent=4))
@@ -259,6 +262,7 @@ def run_pylint(categories, verbose=True, dry_run=False):
     avg_lm_score = 0
     core_code = categories['core']
     lm_code = categories['load_module']
+    pinmap_code = categories['pin_maps']
 
     for code in core_code:
         if code == 'linter' or dry_run:
@@ -274,6 +278,12 @@ def run_pylint(categories, verbose=True, dry_run=False):
         avg_lm_score += lm_score
         source_is_ok = not any(key in lm_issue for key in error_msg_lm)
         categories['load_module'][code]['linter']['pylint'] = (lm_score, lm_issue, source_is_ok)
+    for code in pinmap_code:
+        if code == 'linter' or dry_run:
+            continue
+        pinmap_score, pinmap_issue = _run_pylint(code)
+        source_is_ok = not any(key in pinmap_issue for key in error_msg_core)
+        categories['pin_maps'][code]['linter']['pylint'] = (pinmap_score, pinmap_issue, source_is_ok)
 
     avg_core_score = round(avg_core_score / (len(core_code)-1), 2)
     categories['core']['linter']['pylint'] = avg_core_score
@@ -290,7 +300,8 @@ def pylint_verdict_analyze(categories):
     failed = []
     core = categories['core']
     lm = categories['load_module']
-    resources = {**lm, **core}
+    pinmaps = categories['pin_maps']
+    resources = {**lm, **core, **pinmaps}
     for res in resources:
         if 'linter' in res:
             continue
@@ -308,17 +319,20 @@ def add_ref_counter(categories, verbose=True):
     def _update(_m_keys, _dep, _res):
         nonlocal categories
         for _m_key in _m_keys:
+            dep_key = next((res for res in categories[_m_key] if os.path.basename(res) == _dep), None)
+            if dep_key is None:
+                continue
             try:
-                if categories[_m_key][_dep]['linter'].get('ref', None) is None:
-                    categories[_m_key][_dep]['linter']['ref'] = [0, []]
-                categories[_m_key][_dep]['linter']['ref'][0] += 1
-                categories[_m_key][_dep]['linter']['ref'][1].append(_res)
+                if categories[_m_key][dep_key]['linter'].get('ref', None) is None:
+                    categories[_m_key][dep_key]['linter']['ref'] = [0, []]
+                categories[_m_key][dep_key]['linter']['ref'][0] += 1
+                categories[_m_key][dep_key]['linter']['ref'][1].append(_res)
                 if verbose:
-                    print(f"\tUpdate refs: {_m_key}->{_dep}->linter:")
-                    print(json.dumps(categories[_m_key][_dep]['linter'], sort_keys=True, indent=4))
+                    print(f"\tUpdate refs: {_m_key}->{dep_key}->linter:")
+                    print(json.dumps(categories[_m_key][dep_key]['linter'], sort_keys=True, indent=4))
                 return True
             except Exception as e:
-                print(f"ERROR: add_ref_counter {_m_key}->{_dep}: {e}: ")
+                print(f"ERROR: add_ref_counter {_m_key}->{dep_key}: {e}: ")
         return False
 
     for master_key in categories:
@@ -377,6 +391,19 @@ def _verdict_gen(master_key, categories, verbose=True):
 def check_while_out_of_async_in_load_modules():
     # TODO...
     pass
+
+
+def _resource_printout_by_parent(resources):
+    grouped = {}
+    for res in resources:
+        grouped.setdefault(os.path.dirname(res) or 'root', []).append(res)
+    printout = []
+    for parent, parent_resources in grouped.items():
+        printout.append(f"  {parent}")
+        for i, res in enumerate(parent_resources):
+            with open(os.path.join(MICROS_SOURCE_DIR, res), 'r') as file:
+                printout.append(f"\t{i+1}\t{sum(1 for _ in file)}\t{res}")
+    return printout
 
 
 def create_summary_stat(categories, states, verbose=True):
@@ -447,6 +474,8 @@ def short_report(categories, states, verbose=True):
     summary['files'], printout1 = _verdict_gen(master_key='core', categories=categories, verbose=verbose)
     _files, printout2 = _verdict_gen(master_key='load_module', categories=categories, verbose=verbose)
     summary['files'].update(_files)
+    _, pinmaps = _verdict_gen(master_key='pin_maps', categories=categories, verbose=verbose)
+    other = _resource_printout_by_parent(categories['other'])
 
     # Generate summary DIFF
     try:
@@ -471,6 +500,12 @@ def short_report(categories, states, verbose=True):
         print(line)
     print("micrOS Load Module resources")
     for line in printout2:
+        print(line)
+    print("micrOS PIN MAP resources")
+    for line in pinmaps:
+        print(line)
+    print("micrOS Other resources")
+    for line in other:
         print(line)
     print("########################        micrOS linter      ###########################")
     print(f"        core system:                {sum_core_lines}{_vis(core_diff[0])} lines / {core_cnt}{_vis(core_diff[1])} files")
@@ -541,6 +576,9 @@ def main(verbose=True):
     print("== RUN checker on parsed resources ==")
     s1, warn1, categories = core_dep_checker(categories, verbose=verbose)
     categories['core']['linter']['mlint'] = (s1, warn1)
+    pinmap_categories = {**categories, 'core': categories['pin_maps']}
+    s_pin, warn_pin, _ = core_dep_checker(pinmap_categories, verbose=verbose)
+    categories['pin_maps']['linter']['mlint'] = (s_pin, warn_pin)
     s2, warn2, categories = load_module_checker(categories, verbose=verbose)
     categories['load_module']['linter']['mlint'] = (s1, warn2)
     categories = run_pylint(categories, verbose=verbose, dry_run=False)
@@ -549,6 +587,7 @@ def main(verbose=True):
 
     # Short report
     exitcode, categories, summary, is_better = short_report(categories, {'core_dep_checker': (s1, warn1),
+                                                     'pin_map_checker': (s_pin, warn_pin),
                                                      'load_module_checker': (s2, warn2),
                                                      'pylint_checker': (s3, pylint_verdict)},
                                         verbose=verbose)
@@ -560,4 +599,3 @@ def main(verbose=True):
 
 if __name__ == "__main__":
     sys.exit(main(verbose=True))
-

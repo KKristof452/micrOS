@@ -1,5 +1,28 @@
 // OPTIONAL MICROS REST UI WIDGETS FOR UAPI.JS
 
+function moduleCommandSuggestions(response) {
+    const result = response && Object.prototype.hasOwnProperty.call(response, 'result') ? response.result : response;
+    let modules = Array.isArray(result) ? result : [];
+    if (!modules.length && typeof result === 'string') {
+        try {
+            modules = JSON.parse(result);
+        } catch (_) {
+            const matches = result.match(/["'][A-Za-z_][A-Za-z0-9_]*["']/g) || [];
+            modules = matches.map(moduleName => moduleName.slice(1, -1));
+        }
+    }
+    return [...new Set((Array.isArray(modules) ? modules : [])
+        .map(moduleName => typeof moduleName === 'string' ? moduleName.trim() : '')
+        .filter(moduleName => /^[A-Za-z_][A-Za-z0-9_]*$/.test(moduleName))
+    )]
+        .flatMap(command => {
+            if (command === 'task') {
+                return ['task list', 'task show <taskID>', 'task kill <taskID>'];
+            }
+            return [`${command} help`];
+        });
+}
+
 function restWidget(container='restWidget', opts={}) {
     const root = byId(container);
     if (!root) {return null;}
@@ -10,6 +33,7 @@ function restWidget(container='restWidget', opts={}) {
     const historyKey = opts.historyKey || 'micros.rest.commands';
     let history = [];
     try {history = JSON.parse(sessionStorage.getItem(historyKey) || '[]').filter(x => typeof x === 'string');} catch (_) {}
+    let suggestions = ['modules'];
 
     const label = makeEl('label', {htmlFor: inputId, textContent: opts.label || '⚙️ Enter micrOS command: '});
     const input = styled(makeEl('input', {type: 'text', id: inputId, value: opts.value || ''}), 'background:transparent;max-width:none;min-width:0;padding-right:34px;position:relative;width:100%;z-index:1;');
@@ -22,7 +46,8 @@ function restWidget(container='restWidget', opts={}) {
     const responseBox = makeEl('pre', {id: opts.responseId || `${prefix}restConsoleResponse`});
     const time = makeEl('p', {id: opts.timeId || `${prefix}restConsoleTime`});
     const updateHint = () => {
-        ghost.textContent = input.value && history.find(x => x.startsWith(input.value) && x !== input.value) || '';
+        const commands = [...new Set([...history, ...suggestions])];
+        ghost.textContent = input.value && commands.find(x => x.startsWith(input.value) && x !== input.value) || '';
         accept.style.display = ghost.textContent ? '' : 'none';
     };
     const acceptHint = () => {
@@ -59,6 +84,12 @@ function restWidget(container='restWidget', opts={}) {
     root.textContent = '';
     root.append(makeEl('h3', {}, [label]), form, url, responseBox, time);
     updateHint();
+    restAPICore('modules', opts.modulesTimeout || 3000).then(({response}) => {
+        const commands = moduleCommandSuggestions(response);
+        if (!commands.length) {return;}
+        suggestions = [...new Set(['modules', ...commands])];
+        updateHint();
+    }).catch(error => console.error('Error loading command suggestions:', error));
     return {root, input, form, url, response: responseBox, time};
 }
 
